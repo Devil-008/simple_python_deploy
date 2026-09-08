@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import jwt
+# pyrefly: ignore [missing-import]
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 
@@ -168,5 +169,152 @@ def get_user():
     }), 200
 
 
+# -----------------------------------------------------------------------------
+# Ticket Management Domain
+# -----------------------------------------------------------------------------
+
+VALID_CATEGORIES = {"technical", "billing", "account", "feature"}
+VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
+
+TICKETS = {
+    101: {
+        "id": 101,
+        "ticket_key": "TCK-101",
+        "title": "Database connection pool exhausted",
+        "description": "Backend database pool hits limit during peak hours",
+        "category": "technical",
+        "priority": "high",
+        "status": "OPEN",
+        "tags": ["database", "infrastructure"],
+        "created_by": 1,
+        "created_at": "2026-09-08T10:00:00Z",
+    }
+}
+_next_ticket_id = 102
+
+
+def extract_auth_user():
+    """Extract and authenticate user from Authorization Bearer header. Returns (user, error_response)."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header:
+        return None, (jsonify({"success": False, "error": "Authorization header is required"}), 401)
+
+    parts = auth_header.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        return None, (jsonify({"success": False, "error": "Authorization header must use Bearer token"}), 401)
+
+    try:
+        payload = decode_token(parts[1].strip())
+    except jwt.ExpiredSignatureError:
+        return None, (jsonify({"success": False, "error": "Token has expired"}), 401)
+    except jwt.InvalidTokenError:
+        return None, (jsonify({"success": False, "error": "Invalid token"}), 401)
+
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
+        return None, (jsonify({"success": False, "error": "Invalid token subject"}), 401)
+
+    user = get_user_by_id(user_id)
+    if user is None:
+        return None, (jsonify({"success": False, "error": "User not found"}), 404)
+
+    return user, None
+
+
+def validate_ticket_payload(data):
+    """Validate ticket input payload against business rules."""
+    if not isinstance(data, dict):
+        return "Request payload must be a JSON object"
+
+    title = data.get("title")
+    description = data.get("description")
+    category = data.get("category")
+    priority = data.get("priority", "medium")
+
+    if not title or not description or not category:
+        return "title, description, and category are required"
+
+    if not isinstance(title, str) or len(title.strip()) < 5 or len(title.strip()) > 100:
+        return "title must be between 5 and 100 characters"
+
+    if not isinstance(category, str) or category.strip().lower() not in VALID_CATEGORIES:
+        return f"Invalid category. Allowed values: {', '.join(sorted(VALID_CATEGORIES))}"
+
+    if priority and (not isinstance(priority, str) or priority.strip().lower() not in VALID_PRIORITIES):
+        return f"Invalid priority. Allowed values: {', '.join(sorted(VALID_PRIORITIES))}"
+
+    return None
+
+
+def create_ticket_record(data):
+    """Create and persist a new support ticket record."""
+    global _next_ticket_id
+    ticket_id = _next_ticket_id
+    _next_ticket_id += 1
+
+    ticket_record = {
+        "id": ticket_id,
+        "ticket_key": f"TCK-{ticket_id}",
+        "title": data["title"].strip(),
+        "description": data["description"].strip(),
+        "category": data["category"].strip().lower(),
+        "priority": data.get("priority", "medium").strip().lower(),
+        "status": "OPEN",
+        "tags": data.get("tags") if isinstance(data.get("tags"), list) else [],
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    TICKETS[ticket_id] = ticket_record
+    return ticket_record
+
+
+def get_ticket_by_id(ticket_id):
+    """Retrieve ticket dictionary by numeric ticket ID."""
+    return TICKETS.get(ticket_id)
+
+
+@app.post("/api/tickets")
+def create_ticket_handler():
+    """Create a support ticket (Public Endpoint - No Token Required)."""
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Request body must be JSON"
+        }), 400
+
+    data = request.get_json(silent=True) or {}
+    validation_err = validate_ticket_payload(data)
+    if validation_err:
+        return jsonify({
+            "success": False,
+            "error": validation_err
+        }), 400
+
+    new_ticket = create_ticket_record(data)
+
+    return jsonify({
+        "success": True,
+        "message": "Ticket created successfully",
+        "data": new_ticket
+    }), 201
+
+
+@app.get("/api/tickets/<int:ticket_id>")
+def get_ticket_handler(ticket_id):
+    """Retrieve details for a specific support ticket (Public Endpoint - No Token Required)."""
+    ticket = get_ticket_by_id(ticket_id)
+    if ticket is None:
+        return jsonify({
+            "success": False,
+            "error": "Ticket not found"
+        }), 404
+
+    return jsonify({
+        "success": True,
+        "data": ticket
+    }), 200
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=True)
+
