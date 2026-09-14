@@ -175,6 +175,7 @@ def get_user():
 
 VALID_CATEGORIES = {"technical", "billing", "account", "feature"}
 VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
+VALID_STATUSES = {"OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"}
 
 TICKETS = {
     101: {
@@ -273,6 +274,36 @@ def get_ticket_by_id(ticket_id):
     return TICKETS.get(ticket_id)
 
 
+def list_tickets_records(category=None, status=None):
+    """Retrieve all tickets, optionally filtered by category and/or status."""
+    results = list(TICKETS.values())
+    if category:
+        category_clean = category.strip().lower()
+        results = [t for t in results if t.get("category") == category_clean]
+    if status:
+        status_clean = status.strip().upper()
+        results = [t for t in results if t.get("status") == status_clean]
+    return results
+
+
+def update_ticket_status_record(ticket_id, new_status):
+    """Update status of a ticket. Returns (ticket, error_message)."""
+    ticket = get_ticket_by_id(ticket_id)
+    if ticket is None:
+        return None, "Ticket not found"
+
+    if not new_status or not isinstance(new_status, str):
+        return None, "status is required"
+
+    normalized_status = new_status.strip().upper()
+    if normalized_status not in VALID_STATUSES:
+        return None, f"Invalid status. Allowed values: {', '.join(sorted(VALID_STATUSES))}"
+
+    ticket["status"] = normalized_status
+    ticket["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return ticket, None
+
+
 @app.post("/api/tickets")
 def create_ticket_handler():
     """Create a support ticket (Public Endpoint - No Token Required)."""
@@ -299,6 +330,21 @@ def create_ticket_handler():
     }), 201
 
 
+@app.get("/api/tickets")
+@app.get("/api/tickets.")
+def list_tickets_handler():
+    """List all support tickets with optional filtering by category and status."""
+    category = request.args.get("category")
+    status = request.args.get("status")
+
+    tickets = list_tickets_records(category=category, status=status)
+    return jsonify({
+        "success": True,
+        "total": len(tickets),
+        "data": tickets
+    }), 200
+
+
 @app.get("/api/tickets/<int:ticket_id>")
 def get_ticket_handler(ticket_id):
     """Retrieve details for a specific support ticket (Public Endpoint - No Token Required)."""
@@ -311,6 +357,42 @@ def get_ticket_handler(ticket_id):
 
     return jsonify({
         "success": True,
+        "data": ticket
+    }), 200
+
+
+@app.patch("/api/tickets/<int:ticket_id>/status")
+def update_ticket_status_handler(ticket_id):
+    """Update status of an existing ticket (OPEN, IN_PROGRESS, RESOLVED, CLOSED)."""
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Request body must be JSON"
+        }), 400
+
+    data = request.get_json(silent=True) or {}
+    new_status = data.get("status")
+    if not new_status:
+        return jsonify({
+            "success": False,
+            "error": "status field is required"
+        }), 400
+
+    ticket, err = update_ticket_status_record(ticket_id, new_status)
+    if err == "Ticket not found":
+        return jsonify({
+            "success": False,
+            "error": err
+        }), 404
+    if err:
+        return jsonify({
+            "success": False,
+            "error": err
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "message": f"Ticket status updated to {ticket['status']}",
         "data": ticket
     }), 200
 

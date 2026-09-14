@@ -1,0 +1,222 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "name": "Ticket Management API",
+    "description": "Deterministic test collection for Ticket Management domain in Agent 24 Flask test target.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Create Support Ticket - Valid",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+              "pm.test('Response indicates success', function () { var j = pm.response.json(); pm.expect(j.success).to.eql(true); });",
+              "pm.test('Ticket has key and OPEN status', function () { var j = pm.response.json(); pm.expect(j.data.ticket_key).to.match(/^TCK-\\d+/); pm.expect(j.data.status).to.eql('OPEN'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Database connection pool exhausted\",\n  \"description\": \"Backend database pool hits limit during peak hours\",\n  \"category\": \"technical\",\n  \"priority\": \"high\",\n  \"tags\": [\"database\", \"infrastructure\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets"]
+        },
+        "description": "Creates a new support ticket record."
+      }
+    },
+    {
+      "name": "2. Create Support Ticket - Missing Required Fields",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('Response indicates failure', function () { var j = pm.response.json(); pm.expect(j.success).to.eql(false); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Only Title\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets"]
+        },
+        "description": "Rejects ticket creation when description or category is missing."
+      }
+    },
+    {
+      "name": "3. Create Support Ticket - Invalid Category",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('Error specifies invalid category', function () { var j = pm.response.json(); pm.expect(j.error).to.include('Invalid category'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Valid Title Here\",\n  \"description\": \"Valid Description Here\",\n  \"category\": \"invalid_category_xyz\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets"]
+        },
+        "description": "Rejects ticket with unrecognized category."
+      }
+    },
+    {
+      "name": "4. Get Existing Ticket by ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Ticket details match', function () { var j = pm.response.json(); pm.expect(j.success).to.eql(true); pm.expect(j.data.id).to.eql(101); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets/101",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets", "101"]
+        },
+        "description": "Retrieves details of seeded ticket 101."
+      }
+    },
+    {
+      "name": "5. Get Non-Existent Ticket",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });",
+              "pm.test('Ticket not found message', function () { var j = pm.response.json(); pm.expect(j.error).to.eql('Ticket not found'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets/9999",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets", "9999"]
+        },
+        "description": "Verifies 404 response for non-existent ticket."
+      }
+    },
+    {
+      "name": "6. List All Tickets",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Returns ticket array', function () { var j = pm.response.json(); pm.expect(j.data).to.be.an('array'); pm.expect(j.total).to.be.at.least(1); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets"]
+        },
+        "description": "Lists all support tickets."
+      }
+    },
+    {
+      "name": "7. Update Ticket Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Status updated to IN_PROGRESS', function () { var j = pm.response.json(); pm.expect(j.data.status).to.eql('IN_PROGRESS'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/tickets/101/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tickets", "101", "status"]
+        },
+        "description": "Updates ticket status."
+      }
+    }
+  ]
+}
